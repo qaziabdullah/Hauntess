@@ -1,0 +1,12 @@
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.csproj.AssemblyReference.cache
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.GeneratedMSBuildEditorConfig.editorconfig
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.AssemblyInfoInputs.cache
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.AssemblyInfo.cs
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.csproj.CoreCompileInputs.cache
+D:\CSCrew\Hauntess\bin\Debug\net8.0\Hauntess.deps.json
+D:\CSCrew\Hauntess\bin\Debug\net8.0\Hauntess.dll
+D:\CSCrew\Hauntess\bin\Debug\net8.0\Hauntess.pdb
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.dll
+D:\CSCrew\Hauntess\obj\Debug\net8.0\refint\Hauntess.dll
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.pdb
+D:\CSCrew\Hauntess\obj\Debug\net8.0\ref\Hauntess.dll
