@@ -10,3 +10,4 @@ D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.dll
 D:\CSCrew\Hauntess\obj\Debug\net8.0\refint\Hauntess.dll
 D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.pdb
 D:\CSCrew\Hauntess\obj\Debug\net8.0\ref\Hauntess.dll
+D:\CSCrew\Hauntess\obj\Debug\net8.0\Hauntess.sourcelink.json

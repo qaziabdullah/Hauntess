@@ -11,14 +11,15 @@ namespace Hauntess;
 
 public class Hauntess : BasePlugin
 {
-    public override string ModuleName => "Hauntess";
-    public override string ModuleVersion => "2.0.0";
+    public override string ModuleName => "Hauntess_Darkness_System";
+    public override string ModuleVersion => "2.3.0";
 
     private CFogController? _masterFogController;
     private bool _isHaunted = false;
 
     public override void Load(bool hotReload)
     {
+        // Sync values constantly to prevent Workshop maps from resetting fog
         RegisterListener<Listeners.OnTick>(OnTick);
         
         RegisterListener<Listeners.OnMapStart>(mapName => {
@@ -49,12 +50,6 @@ public class Hauntess : BasePlugin
                 {
                     currentPlayer.ExecuteClientCommand("cl_glow_brightness 0.0");
                     currentPlayer.ExecuteClientCommand("cl_drawhud_force_teamid_overhead -1");
-                    
-                    // Re-apply fog controller to pawn
-                    if (currentPlayer.PlayerPawn.Value != null && _masterFogController != null)
-                    {
-                        currentPlayer.PlayerPawn.Value.AcceptInput("SetFogController", _masterFogController, null, "!activator");
-                    }
                 }
             });
             
@@ -119,37 +114,40 @@ public class Hauntess : BasePlugin
                 return;
             }
 
-            // 1. NEUTRALIZE WORKSHOP OVERRIDES (Original Hauntess Logic)
+            // 1. NEUTRALIZE WORKSHOP OVERRIDES
             Console.WriteLine("[Hauntess] Disabling workshop lighting entities...");
             
             foreach (var gfog in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("env_gradient_fog"))
             {
                 if (gfog != null && gfog.IsValid) gfog.AcceptInput("Disable");
             }
+
             foreach (var cfog in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("env_cubemap_fog"))
             {
                 if (cfog != null && cfog.IsValid) cfog.AcceptInput("Disable");
             }
+
             foreach (var pp in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("post_processing_volume"))
             {
                 if (pp != null && pp.IsValid) pp.AcceptInput("Disable");
             }
 
-            // 2. DISABLE MAP LIGHTING
+            // 2. DISABLE MAP LIGHTING & APPLY FOG
             Console.WriteLine("[Hauntess] Disabling map lighting...");
             Server.ExecuteCommand("ent_fire light_environment Disable");
             Server.ExecuteCommand("ent_fire env_sky_light Disable");
-            Server.ExecuteCommand("ent_fire env_fog_controller TurnOff");
+            
+            Server.ExecuteCommand("ent_fire env_fog_controller SetStartDist 0");
+            Server.ExecuteCommand("ent_fire env_fog_controller SetEndDist 350");
+            Server.ExecuteCommand("ent_fire env_fog_controller SetFogMaxDensity 1.0");
+            Server.ExecuteCommand("ent_fire env_fog_controller SetColorPrimary \"2 2 4\"");
+            Server.ExecuteCommand("ent_fire env_fog_controller TurnOn");
 
-            // 3. APPLY PLAYER VISIBILITY FIX (From FogOfWar)
-            // Setting this to 1.0f usually ensures players are fully affected by fog (darkened)
-            ChangePlayerVisibility(1.0f);
-
-            // 4. ENABLE DEADLY FRIENDLY FIRE
+            // 3. ENABLE DEADLY FRIENDLY FIRE
             Console.WriteLine("[Hauntess] Enabling Full Friendly Fire...");
             Server.ExecuteCommand("mp_friendlyfire 1");
-            Server.ExecuteCommand("ff_damage_reduction_bullets 1.0");      // 100% damage to teammates
-            Server.ExecuteCommand("ff_damage_reduction_grenade 1.0");      // 100% grenade damage
+            Server.ExecuteCommand("ff_damage_reduction_bullets 1.0");
+            Server.ExecuteCommand("ff_damage_reduction_grenade 1.0");
             Server.ExecuteCommand("ff_damage_reduction_grenade_self 1.0");
             Server.ExecuteCommand("ff_damage_reduction_other 1.0");
             
@@ -159,7 +157,8 @@ public class Hauntess : BasePlugin
             Server.ExecuteCommand("mp_td_dmgtowarn 999999");
             Server.ExecuteCommand("mp_td_spawndmgthreshold 999999");
 
-            // 5. APPLY CLIENT COMMANDS
+            // 4. APPLY TO ALL CURRENT PLAYERS
+            Console.WriteLine("[Hauntess] Applying fog to current players...");
             int playerCount = 0;
             foreach (var player in Utilities.GetPlayers())
             {
@@ -195,7 +194,15 @@ public class Hauntess : BasePlugin
             
             if (existing != null)
             {
-                ConfigureFogParams(existing);
+                fogparams_t p = existing.Fog;
+                p.Enable = true;
+                p.ColorPrimary = Color.FromArgb(255, 2, 2, 4); 
+                p.Start = 0.0f;
+                p.End = 350.0f;
+                p.Maxdensity = 1.0f;
+                p.Exponent = 1.5f;
+                
+                SetStateChangeFogparams(existing, "CFogController", "m_fog");
                 return existing;
             }
 
@@ -205,54 +212,32 @@ public class Hauntess : BasePlugin
             fog.Entity!.Name = name;
             fog.DispatchSpawn();
 
-            ConfigureFogParams(fog);
+            fogparams_t p2 = fog.Fog;
+            p2.Enable = true;
+            p2.ColorPrimary = Color.FromArgb(255, 2, 2, 4); 
+            p2.Start = 0.0f;
+            p2.End = 350.0f; 
+            p2.Maxdensity = 1.0f;
+            p2.Exponent = 1.5f;
+
+            try
+            {
+                var visibility = Utilities.FindAllEntitiesByDesignerName<CPlayerVisibility>("env_player_visibility").FirstOrDefault();
+                if (visibility != null && visibility.IsValid)
+                {
+                    visibility.FogMaxDensityMultiplier = 1.0f; 
+                    Utilities.SetStateChanged(visibility, "CPlayerVisibility", "m_flFogMaxDensityMultiplier");
+                }
+            }
+            catch {}
+
+            SetStateChangeFogparams(fog, "CFogController", "m_fog");
             return fog;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[Hauntess] ERROR in GetOrCreateMasterFog: {ex.Message}");
             return null;
-        }
-    }
-
-    // Settings kept from Hauntess
-    private void ConfigureFogParams(CFogController fog)
-    {
-        fogparams_t p = fog.Fog;
-        p.Enable = true;
-        p.ColorPrimary = Color.FromArgb(255, 2, 2, 4); // Deep Black
-        p.Start = 0.0f;
-        p.End = 350.0f;        // 70% Darkness distance
-        p.Maxdensity = 1.0f;   // Nearly opaque
-        p.Exponent = 1.5f;
-
-        SetStateChangeFogparams(fog, "CFogController", "m_fog");
-    }
-
-    // --- NEW METHOD FROM FOGOFWAR ---
-    private void ChangePlayerVisibility(float visibility = 1.0f)
-    {
-        try 
-        {
-            // try to get env_player_visibility if available
-            CPlayerVisibility? envPlayerVisibility = Utilities.FindAllEntitiesByDesignerName<CPlayerVisibility>("env_player_visibility").FirstOrDefault();
-            if (envPlayerVisibility == null)
-            {
-                // try to create env_player_visibility if not available
-                envPlayerVisibility = Utilities.CreateEntityByName<CPlayerVisibility>("env_player_visibility");
-                if (envPlayerVisibility == null)
-                {
-                    return;
-                }
-                envPlayerVisibility.DispatchSpawn();
-            }
-            // set visibility strength
-            envPlayerVisibility.FogMaxDensityMultiplier = visibility;
-            Utilities.SetStateChanged(envPlayerVisibility, "CPlayerVisibility", "m_flFogMaxDensityMultiplier");
-        }
-        catch (Exception ex)
-        {
-             Console.WriteLine($"[Hauntess] Error changing player visibility: {ex.Message}");
         }
     }
 
@@ -272,19 +257,20 @@ public class Hauntess : BasePlugin
         Console.WriteLine("[Hauntess] Unhaunt command received!");
         _isHaunted = false;
 
-        // Restore Map Settings
         Server.ExecuteCommand("ent_fire light_environment Enable");
         Server.ExecuteCommand("ent_fire env_sky_light Enable");
+        Server.ExecuteCommand("ent_fire env_fog_controller TurnOff");
         
-        // Restore Friendly Fire Defaults
+        // Disable Friendly Fire & Restore Kick Safety
         Server.ExecuteCommand("mp_friendlyfire 0");
         Server.ExecuteCommand("mp_autokick 1");
-        Server.ExecuteCommand("mp_td_dmgtokick 300");
+        Server.ExecuteCommand("mp_td_dmgtokick 300"); // Default CS2 value
         Server.ExecuteCommand("mp_td_dmgtowarn 200");
+        
+        // Reset damage multipliers to default (usually 0.33 or 1.0 depending on mode, resetting to safe default)
         Server.ExecuteCommand("ff_damage_reduction_bullets 0.33");
         Server.ExecuteCommand("ff_damage_reduction_grenade 0.85");
 
-        // Restore Players
         foreach (var p in Utilities.GetPlayers())
         {
             if (p == null || !p.IsValid) continue;
@@ -296,11 +282,22 @@ public class Hauntess : BasePlugin
         {
             _masterFogController.AcceptInput("TurnOff");
         }
-        
-        // Reset Player Visibility to Default (usually -1 or 1 depending on map)
-        ChangePlayerVisibility(1.0f);
 
         Server.PrintToChatAll(" \x06[Hauntess] \x01Light restored. Friendly Fire Disabled.");
+    }
+
+    [ConsoleCommand("css_haunt_test", "Test fog settings")]
+    public void OnHauntTestCommand(CCSPlayerController? player, CommandInfo command)
+    {
+        if (_masterFogController == null || !_masterFogController.IsValid)
+        {
+            player?.PrintToChat("No fog controller exists!");
+            return;
+        }
+
+        var fog = _masterFogController.Fog;
+        player?.PrintToChat($"Fog: Enable={fog.Enable}, Start={fog.Start}, End={fog.End}, Density={fog.Maxdensity}");
+        Console.WriteLine($"[Hauntess] Fog debug: Enable={fog.Enable}, Start={fog.Start}, End={fog.End}, Density={fog.Maxdensity}, Color={fog.ColorPrimary}");
     }
 
     // --- MEMORY HELPERS ---

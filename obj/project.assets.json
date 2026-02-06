@@ -2551,7 +2551,7 @@
   },
   "projectFileDependencyGroups": {
     "net8.0": [
-      "CounterStrikeSharp.API >= 1.0.362"
+      "CounterStrikeSharp.API >= 1.0.*"
     ]
   },
   "packageFolders": {
@@ -2598,7 +2598,7 @@
         "dependencies": {
           "CounterStrikeSharp.API": {
             "target": "Package",
-            "version": "[1.0.362, )"
+            "version": "[1.0.*, )"
           }
         },
         "imports": [
