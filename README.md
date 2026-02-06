@@ -15,8 +15,7 @@ Hauntess is a funny Counter-Strike 2 plugin that turns haunted maps into true ni
 
 ## Usage
 
-- The plugin runs automatically on map start and keeps fog synced every tick.
-- You can also force the haunted atmosphere at any time with:
+- You can force the haunted atmosphere at any time with:
 
 ```
 css_haunt
