@@ -22,6 +22,11 @@ Hauntess is a funny Counter-Strike 2 plugin that turns haunted maps into true ni
 css_haunt
 ```
 
+```
+!haunt in chat to turn on hauntess.
+!unhaunt in chat to turn off hauntess.
+```
+
 ## Notes
 
 - The fog settings are tuned for heavy darkness (short view distance, max density).
