@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Hauntess")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+228326fd40516b744bbd879337670d9cf2a84b02")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+06120f57dc48dcc2b13453db4f181e8d2878fdec")]
 [assembly: System.Reflection.AssemblyProductAttribute("Hauntess")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Hauntess")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

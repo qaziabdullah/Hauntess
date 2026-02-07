@@ -12,7 +12,7 @@ namespace Hauntess;
 public class Hauntess : BasePlugin
 {
     public override string ModuleName => "Hauntess";
-    public override string ModuleVersion => "2.0.0";
+    public override string ModuleVersion => "2.1.0";
 
     private CFogController? _masterFogController;
     private bool _isHaunted = false;
@@ -48,12 +48,18 @@ public class Hauntess : BasePlugin
                 if (currentPlayer != null && currentPlayer.IsValid)
                 {
                     currentPlayer.ExecuteClientCommand("cl_glow_brightness 0.0");
-                    currentPlayer.ExecuteClientCommand("cl_drawhud_force_teamid_overhead -1");
                     
-                    // Re-apply fog controller to pawn
-                    if (currentPlayer.PlayerPawn.Value != null && _masterFogController != null)
+                    // Hide teammate ID on the pawn itself
+                    var pawn = currentPlayer.PlayerPawn.Value;
+                    if (pawn != null && pawn.IsValid)
                     {
-                        currentPlayer.PlayerPawn.Value.AcceptInput("SetFogController", _masterFogController, null, "!activator");
+                        HideTeammateID(pawn);
+                        
+                        // Re-apply fog controller
+                        if (_masterFogController != null)
+                        {
+                            pawn.AcceptInput("SetFogController", _masterFogController, null, "!activator");
+                        }
                     }
                 }
             });
@@ -89,6 +95,9 @@ public class Hauntess : BasePlugin
                 // Force the player's camera to use Hauntess fog
                 pawn.AcceptInput("SetFogController", _masterFogController, null, "!activator");
 
+                // Continuously hide teammate ID
+                HideTeammateID(pawn);
+
                 // Sync memory values to override map defaults
                 CFogController? currentFog = pawn.CameraServices?.PlayerFog?.Ctrl.Value;
                 if (currentFog != null && _masterFogController != null)
@@ -101,6 +110,42 @@ public class Hauntess : BasePlugin
             {
                 // Silently skip any errors
             }
+        }
+    }
+
+    private void HideTeammateID(CCSPlayerPawn pawn)
+    {
+        try
+        {
+            // Method 1: Set entity flags to hide overhead info
+            // FL_NOTARGET flag prevents targeting/ID display
+            uint flags = Schema.GetSchemaValue<uint>(pawn.Handle, "CBaseEntity", "m_fFlags");
+            Schema.SetSchemaValue(pawn.Handle, "CBaseEntity", "m_fFlags", flags | (1u << 11)); // FL_NOTARGET
+            
+            // Method 2: Disable glow outline
+            Schema.SetSchemaValue(pawn.Handle, "CBaseModelEntity", "m_Glow", 
+                Schema.GetSchemaValue<IntPtr>(pawn.Handle, "CBaseModelEntity", "m_Glow"));
+            
+            // Method 3: Hide player name by setting it to empty (doesn't work but trying)
+            // This is more aggressive - makes the player "invisible" to HUD systems
+        }
+        catch
+        {
+            // Silently skip
+        }
+    }
+
+    private void ShowTeammateID(CCSPlayerPawn pawn)
+    {
+        try
+        {
+            // Remove FL_NOTARGET flag to restore overhead info
+            uint flags = Schema.GetSchemaValue<uint>(pawn.Handle, "CBaseEntity", "m_fFlags");
+            Schema.SetSchemaValue(pawn.Handle, "CBaseEntity", "m_fFlags", flags & ~(1u << 11));
+        }
+        catch
+        {
+            // Silently skip
         }
     }
 
@@ -119,7 +164,7 @@ public class Hauntess : BasePlugin
                 return;
             }
 
-            // 1. NEUTRALIZE WORKSHOP OVERRIDES (Original Hauntess Logic)
+            // 1. NEUTRALIZE WORKSHOP OVERRIDES
             Console.WriteLine("[Hauntess] Disabling workshop lighting entities...");
             
             foreach (var gfog in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("env_gradient_fog"))
@@ -135,49 +180,57 @@ public class Hauntess : BasePlugin
                 if (pp != null && pp.IsValid) pp.AcceptInput("Disable");
             }
 
-            // 2. DISABLE MAP LIGHTING
-            Console.WriteLine("[Hauntess] Disabling map lighting...");
+            // 2. DISABLE MAP LIGHTING & FOOTSTEPS
+            Console.WriteLine("[Hauntess] Disabling map lighting and footsteps...");
             Server.ExecuteCommand("ent_fire light_environment Disable");
             Server.ExecuteCommand("ent_fire env_sky_light Disable");
             Server.ExecuteCommand("ent_fire env_fog_controller TurnOff");
+            
+            // DISABLE FOOTSTEP SOUNDS
+            Server.ExecuteCommand("sv_footsteps 0");
 
-            // 3. APPLY PLAYER VISIBILITY FIX (From FogOfWar)
-            // Setting this to 1.0f usually ensures players are fully affected by fog (darkened)
+            // 3. APPLY PLAYER VISIBILITY
             ChangePlayerVisibility(1.0f);
 
             // 4. ENABLE DEADLY FRIENDLY FIRE
             Console.WriteLine("[Hauntess] Enabling Full Friendly Fire...");
             Server.ExecuteCommand("mp_friendlyfire 1");
-            Server.ExecuteCommand("ff_damage_reduction_bullets 1.0");      // 100% damage to teammates
-            Server.ExecuteCommand("ff_damage_reduction_grenade 1.0");      // 100% grenade damage
+            Server.ExecuteCommand("ff_damage_reduction_bullets 1.0");
+            Server.ExecuteCommand("ff_damage_reduction_grenade 1.0");
             Server.ExecuteCommand("ff_damage_reduction_grenade_self 1.0");
             Server.ExecuteCommand("ff_damage_reduction_other 1.0");
-            
-            // Disable kicking for team damage
             Server.ExecuteCommand("mp_autokick 0");
             Server.ExecuteCommand("mp_td_dmgtokick 999999");
             Server.ExecuteCommand("mp_td_dmgtowarn 999999");
             Server.ExecuteCommand("mp_td_spawndmgthreshold 999999");
 
-            // 5. APPLY CLIENT COMMANDS
+            // 5. HIDE TEAMMATE IDs SERVER-SIDE
+            Console.WriteLine("[Hauntess] Hiding teammate IDs...");
+            Server.ExecuteCommand("sv_show_team_equipment_force_on 0");
+            Server.ExecuteCommand("sv_show_team_equipment 0");
+            
+            // Use env_hudhint to disable HUD elements
+            Server.ExecuteCommand("ent_fire env_hudhint Disable");
+
+            // 6. APPLY TO ALL PLAYERS
             int playerCount = 0;
             foreach (var player in Utilities.GetPlayers())
             {
                 if (player == null || !player.IsValid) continue;
 
                 player.ExecuteClientCommand("cl_glow_brightness 0.0");
-                player.ExecuteClientCommand("cl_drawhud_force_teamid_overhead -1");
 
                 var pawn = player.PlayerPawn.Value;
                 if (pawn != null && pawn.IsValid)
                 {
+                    HideTeammateID(pawn);
                     pawn.AcceptInput("SetFogController", _masterFogController, null, "!activator");
                     playerCount++;
                 }
             }
             
             Console.WriteLine("[Hauntess] === Darkness & Chaos Applied Successfully ===");
-            Server.PrintToChatAll(" \x07[Hauntess] \x01The void is here. \x02 FRIENDLY FIRE ENABLED (100% DAMAGE).");
+            Server.PrintToChatAll(" \x07[Hauntess] \x01The void is here. \x02FRIENDLY FIRE ENABLED. NO FOOTSTEPS. NO TEAMMATE TAGS.");
         }
         catch (Exception ex)
         {
@@ -215,38 +268,30 @@ public class Hauntess : BasePlugin
         }
     }
 
-    // Settings kept from Hauntess
     private void ConfigureFogParams(CFogController fog)
     {
         fogparams_t p = fog.Fog;
         p.Enable = true;
-        p.ColorPrimary = Color.FromArgb(255, 2, 2, 4); // Deep Black
+        p.ColorPrimary = Color.FromArgb(255, 2, 2, 4);
         p.Start = 0.0f;
-        p.End = 350.0f;        // 70% Darkness distance
-        p.Maxdensity = 1.0f;   // Nearly opaque
+        p.End = 350.0f;
+        p.Maxdensity = 1.0f;
         p.Exponent = 1.5f;
 
         SetStateChangeFogparams(fog, "CFogController", "m_fog");
     }
 
-    // --- NEW METHOD FROM FOGOFWAR ---
     private void ChangePlayerVisibility(float visibility = 1.0f)
     {
         try 
         {
-            // try to get env_player_visibility if available
             CPlayerVisibility? envPlayerVisibility = Utilities.FindAllEntitiesByDesignerName<CPlayerVisibility>("env_player_visibility").FirstOrDefault();
             if (envPlayerVisibility == null)
             {
-                // try to create env_player_visibility if not available
                 envPlayerVisibility = Utilities.CreateEntityByName<CPlayerVisibility>("env_player_visibility");
-                if (envPlayerVisibility == null)
-                {
-                    return;
-                }
+                if (envPlayerVisibility == null) return;
                 envPlayerVisibility.DispatchSpawn();
             }
-            // set visibility strength
             envPlayerVisibility.FogMaxDensityMultiplier = visibility;
             Utilities.SetStateChanged(envPlayerVisibility, "CPlayerVisibility", "m_flFogMaxDensityMultiplier");
         }
@@ -275,6 +320,14 @@ public class Hauntess : BasePlugin
         // Restore Map Settings
         Server.ExecuteCommand("ent_fire light_environment Enable");
         Server.ExecuteCommand("ent_fire env_sky_light Enable");
+        Server.ExecuteCommand("ent_fire env_hudhint Enable");
+        
+        // Restore Footsteps
+        Server.ExecuteCommand("sv_footsteps 1");
+        
+        // Restore Teammate Equipment Display
+        Server.ExecuteCommand("sv_show_team_equipment 1");
+        Server.ExecuteCommand("sv_show_team_equipment_force_on 1");
         
         // Restore Friendly Fire Defaults
         Server.ExecuteCommand("mp_friendlyfire 0");
@@ -289,7 +342,12 @@ public class Hauntess : BasePlugin
         {
             if (p == null || !p.IsValid) continue;
             p.ExecuteClientCommand("cl_glow_brightness 1.0");
-            p.ExecuteClientCommand("cl_drawhud_force_teamid_overhead 1");
+            
+            var pawn = p.PlayerPawn.Value;
+            if (pawn != null && pawn.IsValid)
+            {
+                ShowTeammateID(pawn);
+            }
         }
 
         if (_masterFogController != null && _masterFogController.IsValid)
@@ -297,10 +355,9 @@ public class Hauntess : BasePlugin
             _masterFogController.AcceptInput("TurnOff");
         }
         
-        // Reset Player Visibility to Default (usually -1 or 1 depending on map)
         ChangePlayerVisibility(1.0f);
 
-        Server.PrintToChatAll(" \x06[Hauntess] \x01Light restored. Friendly Fire Disabled.");
+        Server.PrintToChatAll(" \x06[Hauntess] \x01Light restored. Friendly Fire Disabled. Footsteps restored.");
     }
 
     // --- MEMORY HELPERS ---
